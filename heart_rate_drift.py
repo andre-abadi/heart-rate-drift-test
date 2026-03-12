@@ -159,20 +159,51 @@ class HeartRateDriftCalculator:
         active_duration = before_cooldown - after_warmup
         active_mid_time = after_warmup + (active_duration / 2)
         
-        # Collect HR and GPS data split by time
+        # Collect HR and GPS data split by time with interpolation at midpoint
         first_segment_hrs = []
         first_segment_gps = []
         last_segment_hrs = []
         last_segment_gps = []
         
+        prev_point = None  # Store previous point for interpolation
+        
         for time, hr, lat, lon, elev in self.track_points:
             if hr is not None and lat is not None and lon is not None and after_warmup <= time <= before_cooldown:
-                if time <= active_mid_time:
+                # Check if midpoint falls between previous and current point
+                if prev_point is not None and prev_point[0] < active_mid_time < time:
+                    # Interpolate at the midpoint
+                    prev_time, prev_hr, prev_lat, prev_lon = prev_point
+                    
+                    # Calculate interpolation factor (0 to 1)
+                    time_span = (time - prev_time).total_seconds()
+                    time_to_mid = (active_mid_time - prev_time).total_seconds()
+                    t = time_to_mid / time_span  # Ranges from 0 to 1
+                    
+                    # Linear interpolate HR
+                    interpolated_hr = prev_hr + (hr - prev_hr) * t
+                    
+                    # Linear interpolate lat/lon
+                    interpolated_lat = prev_lat + (lat - prev_lat) * t
+                    interpolated_lon = prev_lon + (lon - prev_lon) * t
+                    
+                    # Add interpolated point to first segment
+                    first_segment_hrs.append(interpolated_hr)
+                    first_segment_gps.append((interpolated_lat, interpolated_lon))
+                    
+                    # Add current point to second segment (not interpolated, as it's past midpoint)
+                    last_segment_hrs.append(hr)
+                    last_segment_gps.append((lat, lon))
+                elif time <= active_mid_time:
+                    # Before midpoint - add to first segment
                     first_segment_hrs.append(hr)
                     first_segment_gps.append((lat, lon))
                 else:
+                    # After midpoint - add to second segment
                     last_segment_hrs.append(hr)
                     last_segment_gps.append((lat, lon))
+                
+                # Store current point for next iteration
+                prev_point = (time, hr, lat, lon)
         
         if not first_segment_hrs or not first_segment_gps:
             raise ValueError(f"No heart rate/GPS data in first half (after {skip_first_mins}min warm-up)")
