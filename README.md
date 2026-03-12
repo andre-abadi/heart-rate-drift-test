@@ -30,20 +30,6 @@ Aerobic decoupling is the change in aerobic efficiency (power/heart rate ratio f
    - EF = total_distance / avg_hr
 7. **Compute decoupling percentage** = (EF_first - EF_last) / EF_first × 100
 
-### Technical Details
-
-**Distance Calculation:**
-- Uses **haversine formula** on WGS-84 spheroid (Earth radius = 6371 km)
-- 2D calculation based on latitude/longitude only (no 3D distance)
-
-**Heart Rate Averaging:**
-- Simple arithmetic mean of all HR values in the segment
-- All valid HR readings included (no filtering or smoothing)
-
-**Time Interpolation:**
-- Linear interpolation when the exact midpoint timestamp falls between data points
-- Ensures precise temporal splitting regardless of GPS sample rate
-
 ## Files
 
 ### `heart_rate_drift.py`
