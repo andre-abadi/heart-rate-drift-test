@@ -15,21 +15,37 @@ import math
 class HeartRateDriftCalculator:
     """Calculates heart rate drift from a GPX file."""
     
-    def __init__(self, gpx_file_path: str):
+    def __init__(self, gpx_file_path: str = None, gpx_file_obj = None):
         """
-        Initialize with a GPX file path.
+        Initialize with a GPX file path or file object.
         
         Args:
-            gpx_file_path: Path to the GPX file
+            gpx_file_path: Path to the GPX file (for CLI usage)
+            gpx_file_obj: File object or path-like (for web uploads, in-memory)
         """
         self.gpx_file_path = gpx_file_path
+        self.gpx_file_obj = gpx_file_obj
         self.gpx = self._load_gpx()
         self.track_points = self._extract_track_points()
     
     def _load_gpx(self) -> gpxpy.gpx.GPX:
         """Load and parse the GPX file."""
-        with open(self.gpx_file_path, 'r') as gpx_file:
-            return gpxpy.parse(gpx_file)
+        if self.gpx_file_obj is not None:
+            # Load from file object (web upload)
+            if hasattr(self.gpx_file_obj, 'read'):
+                # File object (BytesIO or similar)
+                content = self.gpx_file_obj.read()
+                if isinstance(content, bytes):
+                    content = content.decode('utf-8')
+                return gpxpy.parse(content)
+            else:
+                # Path-like object
+                with open(self.gpx_file_obj, 'r') as gpx_file:
+                    return gpxpy.parse(gpx_file)
+        else:
+            # Load from file path (CLI)
+            with open(self.gpx_file_path, 'r') as gpx_file:
+                return gpxpy.parse(gpx_file)
     
     def _extract_track_points(self) -> List[Tuple]:
         """
@@ -240,12 +256,13 @@ class HeartRateDriftCalculator:
         }
 
 
-def format_results_for_web(gpx_file: str, skip_first: int = 15, skip_last: int = 15, verbose: bool = False) -> dict:
+def format_results_for_web(gpx_file: str = None, gpx_file_obj = None, skip_first: int = 15, skip_last: int = 15, verbose: bool = False) -> dict:
     """
     Calculate drift and return results in web-friendly format.
     
     Args:
-        gpx_file: Path to the GPX file
+        gpx_file: Path to the GPX file (for CLI usage)
+        gpx_file_obj: File object (for web uploads, in-memory)
         skip_first: Minutes to skip at start (warm-up)
         skip_last: Minutes to skip at end (cool-down)
         verbose: Include detailed segment information
@@ -254,7 +271,7 @@ def format_results_for_web(gpx_file: str, skip_first: int = 15, skip_last: int =
         Dictionary with results (JSON-serializable)
     """
     try:
-        calculator = HeartRateDriftCalculator(gpx_file)
+        calculator = HeartRateDriftCalculator(gpx_file_path=gpx_file, gpx_file_obj=gpx_file_obj)
         results = calculator.calculate_drift(skip_first, skip_last)
         
         tp_equivalent = results['decoupling_percent'] + 0.05
@@ -286,7 +303,8 @@ def format_results_for_web(gpx_file: str, skip_first: int = 15, skip_last: int =
         return output
         
     except FileNotFoundError:
-        return {'status': 'error', 'message': f'GPX file not found: {gpx_file}'}
+        file_ref = gpx_file if gpx_file else 'uploaded GPX file'
+        return {'status': 'error', 'message': f'GPX file not found: {file_ref}'}
     except Exception as e:
         return {'status': 'error', 'message': str(e)}
 

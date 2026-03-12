@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heart Rate Drift Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: block;
+            padding: 15px;
+            background: #f0f0f0;
+            border: 2px dashed #667eea;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label:hover {
+            background: #e8e8ff;
+            border-color: #764ba2;
+        }
+
+        .file-input-label.drag-over {
+            background: #e8e8ff;
+            border-color: #764ba2;
+        }
+
+        .file-name {
+            color: #667eea;
+            font-weight: 500;
+            margin-top: 8px;
+            font-size: 13px;
+            min-height: 18px;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.2);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .checkbox-label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: normal;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-reset {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-reset:hover {
+            background: #e0e0e0;
+        }
+
+        .results-section {
+            display: none;
+            margin-top: 35px;
+            padding-top: 30px;
+            border-top: 2px solid #f0f0f0;
+        }
+
+        .results-section.active {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-label {
+            color: #666;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .result-value {
+            color: #333;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .result-secondary {
+            color: #999;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .result-item.highlight {
+            border-left-color: #764ba2;
+            background: #f5f0ff;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c00;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            border-left: 4px solid #c00;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .details-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .details-section.active {
+            display: block;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .detail-item {
+            font-size: 13px;
+        }
+
+        .detail-label {
+            color: #999;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-weight: 600;
+            margin-top: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏃 Heart Rate Drift Analyzer</h1>
+
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="gpxFile">GPX File</label>
+                <div class="file-input-wrapper">
+                    <input 
+                        type="file" 
+                        id="gpxFile" 
+                        name="file" 
+                        accept=".gpx"
+                        required
+                    >
+                    <label for="gpxFile" class="file-input-label" id="fileInputLabel">
+                        <div>📁 Drag and drop your GPX file here</div>
+                        <div style="font-size: 12px; color: #999; margin-top: 5px;">or click to select</div>
+                    </label>
+                    <div class="file-name" id="fileName"></div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="skipFirst">Warm-up Duration (minutes)</label>
+                <input 
+                    type="number" 
+                    id="skipFirst" 
+                    name="skip_first" 
+                    value="15" 
+                    min="0"
+                    max="120"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="skipLast">Cool-down Duration (minutes)</label>
+                <input 
+                    type="number" 
+                    id="skipLast" 
+                    name="skip_last" 
+                    value="15" 
+                    min="0"
+                    max="120"
+                >
+            </div>
+
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input 
+                        type="checkbox" 
+                        id="verbose" 
+                        name="verbose"
+                    >
+                    <label for="verbose" class="checkbox-label">Show detailed analysis</label>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-submit" id="submitBtn">Analyze GPX</button>
+                <button type="reset" class="btn-reset">Clear</button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing your workout...</p>
+            </div>
+
+            <div class="error-message" id="errorMessage"></div>
+        </form>
+
+        <div class="results-section" id="resultsSection">
+            <h2 style="color: #333; margin-bottom: 20px; font-size: 20px;">Results</h2>
+
+            <div class="result-item highlight">
+                <div class="result-label">Aerobic Decoupling Percentage</div>
+                <div class="result-value" id="decouplingPercent">-</div>
+                <div class="result-secondary" id="decouplingPercent2">-</div>
+            </div>
+
+            <div class="result-item">
+                <div class="result-label">Total Workout Duration</div>
+                <div class="result-value" id="totalDuration">-</div>
+            </div>
+
+            <div class="details-section" id="detailsSection">
+                <strong style="color: #333;">Detailed Analysis</strong>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">First Half Distance</div>
+                        <div class="detail-value" id="firstDistance">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">First Half Avg HR</div>
+                        <div class="detail-value" id="firstHr">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Second Half Distance</div>
+                        <div class="detail-value" id="lastDistance">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Second Half Avg HR</div>
+                        <div class="detail-value" id="lastHr">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">EF Change</div>
+                        <div class="detail-value" id="efChange">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Configuration</div>
+                        <div class="detail-value" id="configuration">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('gpxFile');
+        const fileInputLabel = document.getElementById('fileInputLabel');
+        const fileName = document.getElementById('fileName');
+        const loading = document.getElementById('loading');
+        const resultsSection = document.getElementById('resultsSection');
+        const errorMessage = document.getElementById('errorMessage');
+        const detailsSection = document.getElementById('detailsSection');
+        const verboseCheckbox = document.getElementById('verbose');
+
+        // File input handling
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                fileName.textContent = `📄 ${this.files[0].name}`;
+            }
+        });
+
+        // Drag and drop
+        fileInputLabel.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            fileInputLabel.classList.add('drag-over');
+        });
+
+        fileInputLabel.addEventListener('dragleave', function() {
+            fileInputLabel.classList.remove('drag-over');
+        });
+
+        fileInputLabel.addEventListener('drop', function(e) {
+            e.preventDefault();
+            fileInputLabel.classList.remove('drag-over');
+            fileInput.files = e.dataTransfer.files;
+            if (fileInput.files.length > 0) {
+                fileName.textContent = `📄 ${fileInput.files[0].name}`;
+            }
+        });
+
+        // Form submission
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            if (!fileInput.files.length) {
+                showError('Please select a GPX file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('skip_first', document.getElementById('skipFirst').value);
+            formData.append('skip_last', document.getElementById('skipLast').value);
+            formData.append('verbose', verboseCheckbox.checked);
+
+            loading.classList.add('active');
+            errorMessage.classList.remove('active');
+            resultsSection.classList.remove('active');
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    displayResults(data.data);
+                    resultsSection.classList.add('active');
+                } else {
+                    showError(data.message);
+                }
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+            } finally {
+                loading.classList.remove('active');
+            }
+        });
+
+        function displayResults(data) {
+            document.getElementById('decouplingPercent').textContent = 
+                `${data.decoupling_percent}%`;
+            document.getElementById('decouplingPercent2').textContent = 
+                `TP Equivalent: ${data.tp_equivalent}%`;
+            document.getElementById('totalDuration').textContent = data.total_duration;
+
+            if (verboseCheckbox.checked && data.ef_change !== undefined) {
+                document.getElementById('firstDistance').textContent = 
+                    `${data.first_distance_km} km`;
+                document.getElementById('firstHr').textContent = 
+                    `${data.first_avg_hr} bpm (${data.first_segment_samples} samples)`;
+                document.getElementById('lastDistance').textContent = 
+                    `${data.last_distance_km} km`;
+                document.getElementById('lastHr').textContent = 
+                    `${data.last_avg_hr} bpm (${data.last_segment_samples} samples)`;
+                document.getElementById('efChange').textContent = 
+                    `${data.ef_change.toFixed(6)} km/bpm`;
+                document.getElementById('configuration').textContent = 
+                    `Skip ${data.skip_first_mins}min / ${data.skip_last_mins}min`;
+                detailsSection.classList.add('active');
+            } else {
+                detailsSection.classList.remove('active');
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+        }
+
+        // Update details visibility with verbose checkbox
+        verboseCheckbox.addEventListener('change', function() {
+            if (resultsSection.classList.contains('active')) {
+                if (this.checked) {
+                    detailsSection.classList.add('active');
+                } else {
+                    detailsSection.classList.remove('active');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
