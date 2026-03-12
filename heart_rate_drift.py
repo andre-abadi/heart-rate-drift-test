@@ -1,25 +1,32 @@
 """
-Heart Rate Drift Calculator
-Calculates heart rate drift by comparing average HR from first 15 mins vs last 15 mins of a workout.
+Heart Rate Drift Calculator for Running
+Calculates Aerobic Decoupling (aerobic efficiency drift) from a GPX file.
+Aerobic Decoupling = (EF_second_half - EF_first_half) / EF_first_half × 100%
+Where EF (Efficiency Factor) = Distance / Heart Rate
 """
 
 import gpxpy
 import gpxpy.gpx
 from datetime import timedelta
 from typing import List, Tuple, Optional
+import math
 
 
 class HeartRateDriftCalculator:
     """Calculates heart rate drift from a GPX file."""
     
-    def __init__(self, gpx_file_path: str):
+    def __init__(self, gpx_file_path: str, smooth: bool = True, smoothing_factor: float = 0.3):
         """
         Initialize with a GPX file path.
         
         Args:
             gpx_file_path: Path to the GPX file
+            smooth: Whether to apply exponential moving average smoothing
+            smoothing_factor: EMA smoothing factor (0-1, higher = more responsive to new values)
         """
         self.gpx_file_path = gpx_file_path
+        self.smooth = smooth
+        self.smoothing_factor = smoothing_factor
         self.gpx = self._load_gpx()
         self.track_points = self._extract_track_points()
     
@@ -58,14 +65,103 @@ class HeartRateDriftCalculator:
                     
                     points.append((point.time, hr, point.latitude, point.longitude, point.elevation))
         
+        if self.smooth:
+            points = self._apply_smoothing(points)
+        
         return points
+    
+    def _apply_smoothing(self, points: List[Tuple]) -> List[Tuple]:
+        """
+        Apply exponential moving average (EMA) smoothing to HR data.
+        
+        Args:
+            points: List of track points
+            
+        Returns:
+            Smoothed track points
+        """
+        smoothed_points = []
+        ema_hr = None
+        
+        for time, hr, lat, lon, elev in points:
+            if hr is not None:
+                if ema_hr is None:
+                    ema_hr = float(hr)
+                else:
+                    ema_hr = (hr * self.smoothing_factor) + (ema_hr * (1 - self.smoothing_factor))
+                smoothed_hr = ema_hr
+            else:
+                smoothed_hr = None
+            
+            smoothed_points.append((time, smoothed_hr, lat, lon, elev))
+        
+        return smoothed_points
+    
+    @staticmethod
+    def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """
+        Calculate distance in kilometers between two GPS points using haversine formula.
+        
+        Args:
+            lat1, lon1: First point latitude/longitude
+            lat2, lon2: Second point latitude/longitude
+            
+        Returns:
+            Distance in kilometers
+        """
+        R = 6371  # Earth radius in kilometers
+        
+        lat1_rad = math.radians(lat1)
+        lat2_rad = math.radians(lat2)
+        delta_lat = math.radians(lat2 - lat1)
+        delta_lon = math.radians(lon2 - lon1)
+        
+        a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+        c = 2 * math.asin(math.sqrt(a))
+        
+        return R * c
+    
+    def _calculate_segment_metrics(self, segment_hrs: List[float], segment_points: List[Tuple]) -> dict:
+        """
+        Calculate distance and efficiency factor for a segment.
+        
+        Args:
+            segment_hrs: List of HR values for the segment
+            segment_points: List of (lat, lon) points for the segment
+            
+        Returns:
+            Dictionary with distance (km) and efficiency factor
+        """
+        # Calculate total distance
+        total_distance = 0.0
+        for i in range(1, len(segment_points)):
+            lat1, lon1 = segment_points[i - 1]
+            lat2, lon2 = segment_points[i]
+            total_distance += self._haversine_distance(lat1, lon1, lat2, lon2)
+        
+        # Calculate average HR
+        avg_hr = sum(segment_hrs) / len(segment_hrs) if segment_hrs else 0
+        
+        # Calculate efficiency factor (distance / avg_hr)
+        # EF typically expressed in km/bpm or miles/bpm
+        ef = total_distance / avg_hr if avg_hr > 0 else 0
+        
+        return {
+            'distance_km': total_distance,
+            'avg_hr': avg_hr,
+            'efficiency_factor': ef,
+            'sample_count': len(segment_hrs)
+        }
     
     def calculate_drift(self, skip_first_mins: int = 15, skip_last_mins: int = 15) -> dict:
         """
-        Calculate heart rate drift (PA:HR style).
+        Calculate Aerobic Decoupling (EF drift) for running.
         
         Removes warm-up (first N minutes) and cool-down (last N minutes),
-        then splits the remaining active period in half and compares drift.
+        then splits by time and compares Efficiency Factor (EF) between halves.
+        
+        EF = Distance / Average Heart Rate
+        Aerobic Decoupling = (EF_second - EF_first) / EF_first × 100%
         
         Args:
             skip_first_mins: Duration to skip at start as warm-up (minutes)
@@ -97,38 +193,51 @@ class HeartRateDriftCalculator:
         active_duration = before_cooldown - after_warmup
         active_mid_time = after_warmup + (active_duration / 2)
         
-        # Collect HR data split by time (not sample count)
+        # Collect HR and GPS data split by time
         first_segment_hrs = []
+        first_segment_gps = []
         last_segment_hrs = []
+        last_segment_gps = []
         
         for time, hr, lat, lon, elev in self.track_points:
-            if hr is not None and after_warmup <= time <= before_cooldown:
+            if hr is not None and lat is not None and lon is not None and after_warmup <= time <= before_cooldown:
                 if time <= active_mid_time:
                     first_segment_hrs.append(hr)
+                    first_segment_gps.append((lat, lon))
                 else:
                     last_segment_hrs.append(hr)
+                    last_segment_gps.append((lat, lon))
         
-        if not first_segment_hrs:
-            raise ValueError(f"No heart rate data in first half (after {skip_first_mins}min warm-up)")
-        if not last_segment_hrs:
-            raise ValueError(f"No heart rate data in second half (before {skip_last_mins}min cool-down)")
+        if not first_segment_hrs or not first_segment_gps:
+            raise ValueError(f"No heart rate/GPS data in first half (after {skip_first_mins}min warm-up)")
+        if not last_segment_hrs or not last_segment_gps:
+            raise ValueError(f"No heart rate/GPS data in second half (before {skip_last_mins}min cool-down)")
         
-        # Calculate averages
-        first_avg_hr = sum(first_segment_hrs) / len(first_segment_hrs)
-        last_avg_hr = sum(last_segment_hrs) / len(last_segment_hrs)
+        # Calculate metrics for each segment
+        first_metrics = self._calculate_segment_metrics(first_segment_hrs, first_segment_gps)
+        last_metrics = self._calculate_segment_metrics(last_segment_hrs, last_segment_gps)
         
-        # Calculate drift
-        drift_bpm = last_avg_hr - first_avg_hr
-        drift_percent = (drift_bpm / first_avg_hr) * 100 if first_avg_hr > 0 else 0
+        first_ef = first_metrics['efficiency_factor']
+        last_ef = last_metrics['efficiency_factor']
+        
+        # Calculate aerobic decoupling
+        # Positive value = efficiency decreased (HR increased or distance decreased)
+        # Negative value = efficiency improved (HR decreased or distance increased)
+        decoupling_bpm = first_ef - last_ef
+        decoupling_percent = (decoupling_bpm / first_ef) * 100 if first_ef > 0 else 0
         
         return {
             'total_duration': total_duration,
             'skip_first_mins': skip_first_mins,
             'skip_last_mins': skip_last_mins,
-            'first_avg_hr': round(first_avg_hr, 2),
-            'last_avg_hr': round(last_avg_hr, 2),
-            'drift_bpm': round(drift_bpm, 2),
-            'drift_percent': round(drift_percent, 2),
+            'first_distance_km': round(first_metrics['distance_km'], 2),
+            'first_avg_hr': round(first_metrics['avg_hr'], 2),
+            'first_ef': round(first_ef, 4),
+            'last_distance_km': round(last_metrics['distance_km'], 2),
+            'last_avg_hr': round(last_metrics['avg_hr'], 2),
+            'last_ef': round(last_ef, 4),
+            'decoupling_bpm': round(decoupling_bpm, 4),
+            'decoupling_percent': round(decoupling_percent, 2),
             'first_segment_samples': len(first_segment_hrs),
             'last_segment_samples': len(last_segment_hrs),
         }
@@ -139,38 +248,54 @@ def main():
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins]")
+        print("Usage: python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins] [--no-smooth]")
         print("\nExample: python heart_rate_drift.py workout.gpx 15 15")
-        print("\nCalculates PA:HR drift by:")
+        print("\nOptions:")
+        print("  --no-smooth  : Disable smoothing (default: smoothing enabled)")
+        print("\nCalculates Aerobic Decoupling (Aerobic Efficiency drift) for RUNNING:")
         print("  1. Removing the first N minutes (warm-up)")
         print("  2. Removing the last N minutes (cool-down)")
-        print("  3. Splitting remaining active time in half")
-        print("  4. Comparing early half HR vs late half HR")
+        print("  3. Splitting remaining active time in half (by time, not samples)")
+        print("  4. Calculating Efficiency Factor (EF) = Distance / Avg HR for each half")
+        print("  5. Computing Aerobic Decoupling = (EF_second - EF_first) / EF_first × 100%")
         sys.exit(1)
     
     gpx_file = sys.argv[1]
     skip_first = int(sys.argv[2]) if len(sys.argv) > 2 else 15
     skip_last = int(sys.argv[3]) if len(sys.argv) > 3 else 15
+    smooth = "--no-smooth" not in sys.argv
     
     try:
-        calculator = HeartRateDriftCalculator(gpx_file)
+        calculator = HeartRateDriftCalculator(gpx_file, smooth=smooth)
         results = calculator.calculate_drift(skip_first, skip_last)
         
-        print(f"\n{'='*50}")
-        print(f"Heart Rate Drift Analysis (PA:HR)")
-        print(f"{'='*50}")
+        print(f"\n{'='*60}")
+        print(f"Aerobic Decoupling Analysis (Running)")
+        print(f"{'='*60}")
         print(f"Total Workout Duration: {results['total_duration']}")
         print(f"\nConfiguration:")
         print(f"  Skip first {skip_first} mins (warm-up)")
         print(f"  Skip last {skip_last} mins (cool-down)")
-        print(f"\nEarly half (after warm-up):")
+        print(f"  Smoothing: {'Enabled' if smooth else 'Disabled'}")
+        
+        print(f"\n{'First Half (after warm-up):':40}")
+        print(f"  Distance: {results['first_distance_km']} km")
         print(f"  Average HR: {results['first_avg_hr']} bpm ({results['first_segment_samples']} samples)")
-        print(f"\nLate half (before cool-down):")
+        print(f"  Efficiency Factor: {results['first_ef']} km/bpm")
+        
+        print(f"\n{'Second Half (before cool-down):':40}")
+        print(f"  Distance: {results['last_distance_km']} km")
         print(f"  Average HR: {results['last_avg_hr']} bpm ({results['last_segment_samples']} samples)")
-        print(f"\nPA:HR Drift:")
-        print(f"  Absolute: {results['drift_bpm']} bpm")
-        print(f"  Percentage: {results['drift_percent']}%")
-        print(f"{'='*50}\n")
+        print(f"  Efficiency Factor: {results['last_ef']} km/bpm")
+        
+        print(f"\n{'Aerobic Decoupling:':40}")
+        print(f"  EF Change: {results['decoupling_bpm']:.4f} km/bpm")
+        print(f"  Percentage: {results['decoupling_percent']}%")
+        if results['decoupling_percent'] < 5:
+            print(f"  ✓ Less than 5% - Good aerobic endurance")
+        else:
+            print(f"  ⚠ Greater than 5% - Some fatigue accumulation")
+        print(f"{'='*60}\n")
         
     except FileNotFoundError:
         print(f"Error: GPX file not found: {gpx_file}")
