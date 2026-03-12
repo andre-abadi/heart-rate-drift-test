@@ -15,7 +15,7 @@ import math
 class HeartRateDriftCalculator:
     """Calculates heart rate drift from a GPX file."""
     
-    def __init__(self, gpx_file_path: str, smooth: bool = True, smoothing_factor: float = 0.3):
+    def __init__(self, gpx_file_path: str, smooth: bool = True, smoothing_factor: float = 0.3, skip_pauses: bool = True, pause_threshold_seconds: int = 30):
         """
         Initialize with a GPX file path.
         
@@ -23,12 +23,17 @@ class HeartRateDriftCalculator:
             gpx_file_path: Path to the GPX file
             smooth: Whether to apply exponential moving average smoothing
             smoothing_factor: EMA smoothing factor (0-1, higher = more responsive to new values)
+            skip_pauses: Whether to skip paused segments (gaps > pause_threshold_seconds)
+            pause_threshold_seconds: Time gap threshold to detect pauses (seconds)
         """
         self.gpx_file_path = gpx_file_path
         self.smooth = smooth
         self.smoothing_factor = smoothing_factor
+        self.skip_pauses = skip_pauses
+        self.pause_threshold_seconds = pause_threshold_seconds
         self.gpx = self._load_gpx()
         self.track_points = self._extract_track_points()
+        self.pause_info = None  # Will store pause detection info for debugging
     
     def _load_gpx(self) -> gpxpy.gpx.GPX:
         """Load and parse the GPX file."""
@@ -65,10 +70,60 @@ class HeartRateDriftCalculator:
                     
                     points.append((point.time, hr, point.latitude, point.longitude, point.elevation))
         
+        if self.skip_pauses:
+            points = self._remove_pauses(points)
+        
         if self.smooth:
             points = self._apply_smoothing(points)
         
         return points
+    
+    def _remove_pauses(self, points: List[Tuple]) -> List[Tuple]:
+        """
+        Remove paused segments (gaps > pause_threshold_seconds) from track points.
+        
+        Pauses are detected by checking time gaps between consecutive points.
+        All points within a pause window are removed.
+        
+        Args:
+            points: List of track points
+            
+        Returns:
+            Track points with paused segments removed
+        """
+        if not points:
+            return points
+        
+        filtered_points = [points[0]]  # Always keep first point
+        pause_count = 0
+        pause_duration = timedelta()
+        
+        for i in range(1, len(points)):
+            curr_time = points[i][0]
+            prev_time = points[i - 1][0]
+            
+            if curr_time is None or prev_time is None:
+                filtered_points.append(points[i])
+                continue
+            
+            time_gap = curr_time - prev_time
+            
+            if time_gap.total_seconds() > self.pause_threshold_seconds:
+                # Pause detected - skip this point
+                pause_count += 1
+                pause_duration += time_gap
+            else:
+                # Active segment - keep this point
+                filtered_points.append(points[i])
+        
+        self.pause_info = {
+            'pause_count': pause_count,
+            'pause_duration': pause_duration,
+            'original_points': len(points),
+            'filtered_points': len(filtered_points)
+        }
+        
+        return filtered_points
     
     def _apply_smoothing(self, points: List[Tuple]) -> List[Tuple]:
         """
@@ -291,10 +346,6 @@ def main():
         print(f"\n{'Aerobic Decoupling:':40}")
         print(f"  EF Change: {results['decoupling_bpm']:.4f} km/bpm")
         print(f"  Percentage: {results['decoupling_percent']}%")
-        if results['decoupling_percent'] < 5:
-            print(f"  ✓ Less than 5% - Good aerobic endurance")
-        else:
-            print(f"  ⚠ Greater than 5% - Some fatigue accumulation")
         print(f"{'='*60}\n")
         
     except FileNotFoundError:
