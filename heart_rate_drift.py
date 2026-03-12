@@ -240,13 +240,64 @@ class HeartRateDriftCalculator:
         }
 
 
+def format_results_for_web(gpx_file: str, skip_first: int = 15, skip_last: int = 15, verbose: bool = False) -> dict:
+    """
+    Calculate drift and return results in web-friendly format.
+    
+    Args:
+        gpx_file: Path to the GPX file
+        skip_first: Minutes to skip at start (warm-up)
+        skip_last: Minutes to skip at end (cool-down)
+        verbose: Include detailed segment information
+    
+    Returns:
+        Dictionary with results (JSON-serializable)
+    """
+    try:
+        calculator = HeartRateDriftCalculator(gpx_file)
+        results = calculator.calculate_drift(skip_first, skip_last)
+        
+        tp_equivalent = results['decoupling_percent'] + 0.05
+        
+        output = {
+            'status': 'success',
+            'data': {
+                'total_duration': str(results['total_duration']),
+                'skip_first_mins': skip_first,
+                'skip_last_mins': skip_last,
+                'decoupling_percent': round(results['decoupling_percent'], 2),
+                'tp_equivalent': round(tp_equivalent, 2),
+            }
+        }
+        
+        if verbose:
+            output['data'].update({
+                'first_distance_km': results['first_distance_km'],
+                'first_avg_hr': results['first_avg_hr'],
+                'first_ef': round(results['first_ef'], 4),
+                'first_segment_samples': results['first_segment_samples'],
+                'last_distance_km': results['last_distance_km'],
+                'last_avg_hr': results['last_avg_hr'],
+                'last_ef': round(results['last_ef'], 4),
+                'last_segment_samples': results['last_segment_samples'],
+                'ef_change': round(results['decoupling_bpm'], 6),
+            })
+        
+        return output
+        
+    except FileNotFoundError:
+        return {'status': 'error', 'message': f'GPX file not found: {gpx_file}'}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+
+
 def main():
     """Main entry point."""
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins]")
-        print("\nExample: python heart_rate_drift.py workout.gpx 15 15")
+        print("Usage: python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins] [--verbose]")
+        print("\nExample: python heart_rate_drift.py workout.gpx 15 15 --verbose")
         print("\nCalculates Aerobic Decoupling (Aerobic Efficiency drift) for RUNNING:")
         print("  1. Removing the first N minutes (warm-up)")
         print("  2. Removing the last N minutes (cool-down)")
@@ -258,6 +309,7 @@ def main():
     gpx_file = sys.argv[1]
     skip_first = int(sys.argv[2]) if len(sys.argv) > 2 else 15
     skip_last = int(sys.argv[3]) if len(sys.argv) > 3 else 15
+    verbose = "--verbose" in sys.argv
     
     try:
         calculator = HeartRateDriftCalculator(gpx_file)
@@ -271,19 +323,22 @@ def main():
         print(f"  Skip first {skip_first} mins (warm-up)")
         print(f"  Skip last {skip_last} mins (cool-down)")
         
-        print(f"\n{'First Half (after warm-up):':40}")
-        print(f"  Distance: {results['first_distance_km']} km")
-        print(f"  Average HR: {results['first_avg_hr']} bpm ({results['first_segment_samples']} samples)")
-        print(f"  Efficiency Factor: {results['first_ef']:.4f} km/bpm")
+        if verbose:
+            print(f"\n{'First Half (after warm-up):':40}")
+            print(f"  Distance: {results['first_distance_km']} km")
+            print(f"  Average HR: {results['first_avg_hr']} bpm ({results['first_segment_samples']} samples)")
+            print(f"  Efficiency Factor: {results['first_ef']:.4f} km/bpm")
+            
+            print(f"\n{'Second Half (before cool-down):':40}")
+            print(f"  Distance: {results['last_distance_km']} km")
+            print(f"  Average HR: {results['last_avg_hr']} bpm ({results['last_segment_samples']} samples)")
+            print(f"  Efficiency Factor: {results['last_ef']:.4f} km/bpm")
         
-        print(f"\n{'Second Half (before cool-down):':40}")
-        print(f"  Distance: {results['last_distance_km']} km")
-        print(f"  Average HR: {results['last_avg_hr']} bpm ({results['last_segment_samples']} samples)")
-        print(f"  Efficiency Factor: {results['last_ef']:.4f} km/bpm")
-        
-        print(f"\n{'Aerobic Decoupling:':40}")
-        print(f"  EF Change: {results['decoupling_bpm']:.6f} km/bpm")
-        print(f"  Percentage: {results['decoupling_percent']:.2f}%")
+        print(f"\n{'Results:':40}")
+        if verbose:
+            print(f"  EF Change: {results['decoupling_bpm']:.6f} km/bpm")
+        tp_equivalent = results['decoupling_percent'] + 0.05
+        print(f"  Pa:HR: {results['decoupling_percent']:.2f}% [TP: {tp_equivalent:.2f}%]")
         print(f"{'='*60}\n")
         
     except FileNotFoundError:
