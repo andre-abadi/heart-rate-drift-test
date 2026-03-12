@@ -229,12 +229,12 @@ class HeartRateDriftCalculator:
             'skip_last_mins': skip_last_mins,
             'first_distance_km': round(first_metrics['distance_km'], 2),
             'first_avg_hr': round(first_metrics['avg_hr'], 2),
-            'first_ef': round(first_ef, 4),
+            'first_ef': first_ef,
             'last_distance_km': round(last_metrics['distance_km'], 2),
             'last_avg_hr': round(last_metrics['avg_hr'], 2),
-            'last_ef': round(last_ef, 4),
-            'decoupling_bpm': round(decoupling_bpm, 4),
-            'decoupling_percent': round(decoupling_percent, 2),
+            'last_ef': last_ef,
+            'decoupling_bpm': first_ef - last_ef,
+            'decoupling_percent': ((first_ef - last_ef) / first_ef) * 100 if first_ef > 0 else 0,
             'first_segment_samples': len(first_segment_hrs),
             'last_segment_samples': len(last_segment_hrs),
         }
@@ -274,16 +274,16 @@ def main():
         print(f"\n{'First Half (after warm-up):':40}")
         print(f"  Distance: {results['first_distance_km']} km")
         print(f"  Average HR: {results['first_avg_hr']} bpm ({results['first_segment_samples']} samples)")
-        print(f"  Efficiency Factor: {results['first_ef']} km/bpm")
+        print(f"  Efficiency Factor: {results['first_ef']:.4f} km/bpm")
         
         print(f"\n{'Second Half (before cool-down):':40}")
         print(f"  Distance: {results['last_distance_km']} km")
         print(f"  Average HR: {results['last_avg_hr']} bpm ({results['last_segment_samples']} samples)")
-        print(f"  Efficiency Factor: {results['last_ef']} km/bpm")
+        print(f"  Efficiency Factor: {results['last_ef']:.4f} km/bpm")
         
         print(f"\n{'Aerobic Decoupling:':40}")
-        print(f"  EF Change: {results['decoupling_bpm']:.4f} km/bpm")
-        print(f"  Percentage: {results['decoupling_percent']}%")
+        print(f"  EF Change: {results['decoupling_bpm']:.6f} km/bpm")
+        print(f"  Percentage: {results['decoupling_percent']:.2f}%")
         print(f"{'='*60}\n")
         
     except FileNotFoundError:
