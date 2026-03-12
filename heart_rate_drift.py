@@ -15,25 +15,16 @@ import math
 class HeartRateDriftCalculator:
     """Calculates heart rate drift from a GPX file."""
     
-    def __init__(self, gpx_file_path: str, smooth: bool = True, smoothing_factor: float = 0.3, skip_pauses: bool = True, pause_threshold_seconds: int = 30):
+    def __init__(self, gpx_file_path: str):
         """
         Initialize with a GPX file path.
         
         Args:
             gpx_file_path: Path to the GPX file
-            smooth: Whether to apply exponential moving average smoothing
-            smoothing_factor: EMA smoothing factor (0-1, higher = more responsive to new values)
-            skip_pauses: Whether to skip paused segments (gaps > pause_threshold_seconds)
-            pause_threshold_seconds: Time gap threshold to detect pauses (seconds)
         """
         self.gpx_file_path = gpx_file_path
-        self.smooth = smooth
-        self.smoothing_factor = smoothing_factor
-        self.skip_pauses = skip_pauses
-        self.pause_threshold_seconds = pause_threshold_seconds
         self.gpx = self._load_gpx()
         self.track_points = self._extract_track_points()
-        self.pause_info = None  # Will store pause detection info for debugging
     
     def _load_gpx(self) -> gpxpy.gpx.GPX:
         """Load and parse the GPX file."""
@@ -70,87 +61,7 @@ class HeartRateDriftCalculator:
                     
                     points.append((point.time, hr, point.latitude, point.longitude, point.elevation))
         
-        if self.skip_pauses:
-            points = self._remove_pauses(points)
-        
-        if self.smooth:
-            points = self._apply_smoothing(points)
-        
         return points
-    
-    def _remove_pauses(self, points: List[Tuple]) -> List[Tuple]:
-        """
-        Remove paused segments (gaps > pause_threshold_seconds) from track points.
-        
-        Pauses are detected by checking time gaps between consecutive points.
-        All points within a pause window are removed.
-        
-        Args:
-            points: List of track points
-            
-        Returns:
-            Track points with paused segments removed
-        """
-        if not points:
-            return points
-        
-        filtered_points = [points[0]]  # Always keep first point
-        pause_count = 0
-        pause_duration = timedelta()
-        
-        for i in range(1, len(points)):
-            curr_time = points[i][0]
-            prev_time = points[i - 1][0]
-            
-            if curr_time is None or prev_time is None:
-                filtered_points.append(points[i])
-                continue
-            
-            time_gap = curr_time - prev_time
-            
-            if time_gap.total_seconds() > self.pause_threshold_seconds:
-                # Pause detected - skip this point
-                pause_count += 1
-                pause_duration += time_gap
-            else:
-                # Active segment - keep this point
-                filtered_points.append(points[i])
-        
-        self.pause_info = {
-            'pause_count': pause_count,
-            'pause_duration': pause_duration,
-            'original_points': len(points),
-            'filtered_points': len(filtered_points)
-        }
-        
-        return filtered_points
-    
-    def _apply_smoothing(self, points: List[Tuple]) -> List[Tuple]:
-        """
-        Apply exponential moving average (EMA) smoothing to HR data.
-        
-        Args:
-            points: List of track points
-            
-        Returns:
-            Smoothed track points
-        """
-        smoothed_points = []
-        ema_hr = None
-        
-        for time, hr, lat, lon, elev in points:
-            if hr is not None:
-                if ema_hr is None:
-                    ema_hr = float(hr)
-                else:
-                    ema_hr = (hr * self.smoothing_factor) + (ema_hr * (1 - self.smoothing_factor))
-                smoothed_hr = ema_hr
-            else:
-                smoothed_hr = None
-            
-            smoothed_points.append((time, smoothed_hr, lat, lon, elev))
-        
-        return smoothed_points
     
     @staticmethod
     def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -303,25 +214,22 @@ def main():
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins] [--no-smooth]")
+        print("Usage: python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins]")
         print("\nExample: python heart_rate_drift.py workout.gpx 15 15")
-        print("\nOptions:")
-        print("  --no-smooth  : Disable smoothing (default: smoothing enabled)")
         print("\nCalculates Aerobic Decoupling (Aerobic Efficiency drift) for RUNNING:")
         print("  1. Removing the first N minutes (warm-up)")
         print("  2. Removing the last N minutes (cool-down)")
         print("  3. Splitting remaining active time in half (by time, not samples)")
         print("  4. Calculating Efficiency Factor (EF) = Distance / Avg HR for each half")
-        print("  5. Computing Aerobic Decoupling = (EF_second - EF_first) / EF_first × 100%")
+        print("  5. Computing Aerobic Decoupling = (EF_first - EF_second) / EF_first × 100%")
         sys.exit(1)
     
     gpx_file = sys.argv[1]
     skip_first = int(sys.argv[2]) if len(sys.argv) > 2 else 15
     skip_last = int(sys.argv[3]) if len(sys.argv) > 3 else 15
-    smooth = "--no-smooth" not in sys.argv
     
     try:
-        calculator = HeartRateDriftCalculator(gpx_file, smooth=smooth)
+        calculator = HeartRateDriftCalculator(gpx_file)
         results = calculator.calculate_drift(skip_first, skip_last)
         
         print(f"\n{'='*60}")
@@ -331,7 +239,6 @@ def main():
         print(f"\nConfiguration:")
         print(f"  Skip first {skip_first} mins (warm-up)")
         print(f"  Skip last {skip_last} mins (cool-down)")
-        print(f"  Smoothing: {'Enabled' if smooth else 'Disabled'}")
         
         print(f"\n{'First Half (after warm-up):':40}")
         print(f"  Distance: {results['first_distance_km']} km")
