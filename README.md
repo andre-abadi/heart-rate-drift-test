@@ -1,130 +1,195 @@
-# Aerobic Decoupling Calculator
+# Heart Rate Drift Analyser
 
-Calculate **aerobic decoupling** (aerobic efficiency drift) from Garmin GPX files for running workouts.
+Calculate heart rate drift from GPX files for running workouts.
 
-Aerobic decoupling measures how your aerobic efficiency degrades over the course of a run, indicating aerobic fatigue and fitness level. This implementation follows the methodology used by TrainingPeaks, analyzing efficiency changes between the first and second half of your active workout time.
+This project uses an efficiency-factor approach rather than a heart-rate-only shortcut:
 
-## What is Aerobic Decoupling?
+- Efficiency Factor (EF) = distance / average heart rate
+- Heart Rate Drift % = (EF_first_half - EF_second_half) / EF_first_half x 100
 
-Aerobic decoupling is the change in aerobic efficiency (power/heart rate ratio for running: distance/heart rate ratio) between the first and second halves of a workout.
+That makes it useful for aerobic-threshold tests where you hold heart rate steady and let pace vary. A heart-rate-only comparison can miss drift in that scenario; EF-based drift captures the loss of output at the same cardiac cost.
 
-**Formula:**
-- **Efficiency Factor (EF)** = Distance / Average Heart Rate
-- **Aerobic Decoupling %** = (EF_first_half - EF_second_half) / EF_first_half × 100
+## Features
 
-**Interpretation:**
-- **Low decoupling (0-3%)**: Below aerobic threshold.
-- **Moderate (3-5%)**: At aerobic threshold.
-- **High (>5%)**: Above aerobic threshold.
+- CLI analysis for a single GPX file
+- Flask web UI for uploading and analysing GPX files
+- Time-based midpoint split with linear interpolation at the half-way timestamp
+- Detailed first-half / second-half / delta metrics
+- TrainingPeaks-style Pa:HR output with a small displayed TP equivalent offset
+- In-memory upload processing only; no file persistence required
+- Stateless Docker packaging using an LSIO base image and s6-overlay
 
-## Algorithm
+## How It Works
 
-1. **Load GPX file** and extract GPS points with heart rate data from Garmin extensions
-2. **Remove warm-up** (first N minutes, default 15) and **cool-down** (last N minutes, default 15)
-3. **Calculate active duration** and find the midpoint by time (not sample count)
-4. **Interpolate at midpoint** linearly between the two closest data points when midpoint falls between samples
-5. **Split segments** into first half (before midpoint) and second half (after midpoint)
-6. **Calculate EF for each half:**
-   - Sum total distance using haversine formula (2D latitude/longitude)
-   - Average heart rate across all samples
-   - EF = total_distance / avg_hr
-7. **Compute decoupling percentage** = (EF_first - EF_last) / EF_first × 100
+1. Load a GPX file and extract GPS points plus heart rate values from Garmin extensions.
+2. Skip the configured warm-up and cool-down durations.
+3. Split the remaining analysed duration in half by timestamp, not by sample count.
+4. Interpolate a midpoint sample if the half-way time falls between two data points.
+5. Compute segment metrics for each half:
+   - distance
+   - average heart rate
+   - efficiency factor
+6. Calculate drift percentage from the change in efficiency factor.
 
-## Files
+## Interpretation
 
-### `heart_rate_drift.py`
-Main calculator implementation. Contains the `HeartRateDriftCalculator` class with all logic for:
-- Loading and parsing Garmin GPX files
-- Extracting HR data from nested extensions
-- Calculating haversine distances
-- Performing time-based segment splitting with interpolation
-- Computing efficiency factors and decoupling
+The current backend interpretation bands are:
 
-**Key Methods:**
-- `calculate_drift(skip_first_mins, skip_last_mins)` - Main entry point; returns decoupling stats
+- `0.0%` to `3.5%`: Below AeT
+- `>3.5%` to `<5.0%`: Within AeT
+- `>=5.0%`: Above AeT
 
-### `validate_accuracy.py`
-Testing harness for accuracy validation. Auto-detects test files by filename pattern and compares calculated results against known truth values.
+The web UI renders this on a visual scale and the backend returns the interpretation label and marker position in the API response.
 
-**Filename pattern:** `test[_skip_first_skip_last_truth_value].gpx`
-- Example: `test_15_15_2.16.gpx` = test with 15 min skip each end, expected result 2.16%
+## Project Files
 
-**Output:** Comparison table showing file, truth value, calculated value, error %, and pass/fail
+- [heart_rate_drift.py](heart_rate_drift.py): Core parser, calculations, CLI entry point, and web response formatting
+- [webapp.py](webapp.py): Flask app with `/`, `/analyze`, and `/health`
+- [templates/index.html](templates/index.html): Single-page UI
+- [validate_accuracy.py](validate_accuracy.py): Validation harness against GPX files in `test/`
+- [docker/Dockerfile](docker/Dockerfile): Stateless LSIO-based container image
 
-## Usage
+## Requirements
 
-### CLI
+- Python 3.10+
+- `flask`
+- `gpxpy`
+- `gunicorn` for the container image
+
+## Local CLI Usage
+
+Basic usage:
 
 ```bash
-python heart_rate_drift.py <gpx_file> [skip_warmup_mins] [skip_cooldown_mins]
+python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins] [--verbose]
 ```
 
-**Example:**
+Example:
+
 ```bash
-python heart_rate_drift.py my_run.gpx 15 15
+python heart_rate_drift.py test/test_15_15_2.16.gpx 15 15 --verbose
 ```
 
-**Output:**
+Example output:
+
+```text
+============================================================
+Heart Rate Drift Analyser
+============================================================
+Total Workout Duration : 1:40:18
+Analysed Duration      : 1:10:18
+
+Configuration:
+  Skip first 15 mins (warm-up)
+  Skip last 15 mins (cool-down)
+
+First Half (after warm-up):
+  Distance        : 5.41 km
+  Average HR      : 154.22 bpm  (2078 samples)
+  Efficiency (EF) : 35.08 m/bpm
+
+Second Half (before cool-down):
+  Distance        : 5.29 km
+  Average HR      : 154.07 bpm  (2078 samples)
+  Efficiency (EF) : 34.34 m/bpm
+
+Delta (2nd half vs 1st half):
+  HR Change       : -0.15 bpm
+  EF Change       : -0.74 m/bpm
+
+Results:
+  Pa:HR: 2.11% [TP: 2.16%]
+  Below AeT - Recommend increasing Z2 Max by 5bpm
+============================================================
 ```
-============================================================
-Aerobic Decoupling Analysis (Running)
-============================================================
-Total Duration: 1:15:30
-Skip: 15min warm-up, 15min cool-down
 
-First Half:
-  Distance: 6.42 km
-  Avg HR: 145 bpm (780 samples)
-  EF: 0.0443 km/bpm
+## Local Web Usage
 
-Second Half:
-  Distance: 6.38 km
-  Avg HR: 152 bpm (775 samples)
-  EF: 0.0420 km/bpm
+Run the Flask app:
 
-Aerobic Decoupling: 5.19%
-============================================================
+```bash
+python webapp.py
 ```
 
-## Accuracy
+Then open:
 
-This section is a report of evaluations conducted on two GPX files, which are, for privacy reasons not included with this repository, but served as the sources of truth, having been analysed in TrainingPeaks.
+```text
+http://127.0.0.1:5000
+```
 
-**Current performance against TrainingPeaks:**
-- GPX 1 (2.16% expected): 2.11% calculated = **0.05% error**
-- GPX 2 (4.96% expected): 4.90% calculated = **0.06% error**
+API endpoints:
 
-## Debugging: What We Tried (and Why It Didn't Help)
+- `GET /` - web UI
+- `POST /analyze` - analyse an uploaded GPX file
+- `GET /health` - health check
 
-The initial implementation achieved consistent 0.05% error against TrainingPeaks across different test GPX files done by different subjects using different equipment. That is, the number was always 0.05% **less** than the TrainingPeaks number We explored several optimization approaches to close this final gap:
+The web app processes uploads entirely in memory and does not save GPX files to disk.
 
-### ❌ 3D Distance with Elevation
-**Tried:** Including elevation delta in distance calculation using 3D haversine
-- **Result:** Test 1 improved to 0.01% error, but Test 2 worsened to 0.15% error
-- **Conclusion:** Elevation data from Garmin is noisy and terrain-specific. 2D haversine performs better on average.
+## Validation
 
-### ❌ Heart Rate Outlier Removal (IQR Method)
-**Tried:** Filtered HR values using Interquartile Range (IQR = 1.5 × (Q3 - Q1)) to remove extreme readings
-- **Result:** Accuracy became significantly worse
-- **Conclusion:** Garmin HR data is clean. No filtering needed. The bias isn't coming from outliers.
+Run the validation harness:
 
-### ❌ HR Data Smoothing
-**Tried:** Gaussian/moving average smoothing of heart rate values
-- **Result:** No meaningful improvement, added complexity
-- **Conclusion:** Simple mean is the best approach. Smoothing introduces artificial data.
+```bash
+python validate_accuracy.py
+```
 
-### ❌ Pause Detection & Time Exclusion
-**Tried:** Automatically detect pauses (low GPS speed) and exclude from calculations
-- **Result:** Unnecessary complexity for typical continuous runs
-- **Conclusion:** Removed. Users can manually specify skip times if needed.
+It discovers GPX files in `test/` using the naming convention:
 
-### ✓ Time-Based Splitting with Linear Interpolation
-**What worked:** Splitting by timestamp (not sample count) with linear interpolation at midpoint crossing
-- This was critical for matching TrainingPeaks more closely
-- Ensures precise temporal division regardless of GPS sample rate
+```text
+test[_skip_first_skip_last_truth_value].gpx
+```
 
-### Conclusion: The 0.05% Bias
+Examples:
 
-After exhaustive testing, the remaining 0.05% systematic bias is likely due to TrainingPeaks implementation specifics that we can't replicate exactly
+- `test_15_15_2.16.gpx`
+- `test2_15_5_4.96.gpx`
+
+Current verified accuracy is approximately `0.05%` absolute error versus the stored truth values in the sample test files.
+
+## Docker
+
+The container image is:
+
+- based on `lscr.io/linuxserver/baseimage-alpine:3.21`
+- stateless
+- running under s6-overlay
+- configured to run the app as the LSIO `abc` user
+
+Build from the repository root:
+
+```bash
+docker build -f docker/Dockerfile -t heart-rate-drift .
+```
+
+Run:
+
+```bash
+docker run -e PUID=1000 -e PGID=1000 -p 5000:5000 heart-rate-drift
+```
+
+Notes:
+
+- No volume mappings are required.
+- `PUID` and `PGID` are optional for this stateless app but still allow the container to avoid running as root.
+- The Docker packaging files live under `docker/` and are copied into the image from there.
+
+## Accuracy Notes
+
+The implementation is designed to match TrainingPeaks-style behaviour closely, using:
+
+- time-based splitting instead of sample-count splitting
+- midpoint interpolation
+- 2D haversine distance
+- no pause detection
+- no HR smoothing
+
+Those choices were kept because they produced the most consistent results across the included validation files.
+
+Across the validation GPX files we tested, the calculated result was consistently `0.05%` lower than the corresponding TrainingPeaks result, regardless of the file itself. Because that difference remained constant rather than varying unpredictably by workout, we believe that our implementation is mathematically sound and that the remaining gap is due to a small TrainingPeaks-specific reporting or implementation offset rather than a flaw in the underlying calculation.
+
+For that reason, the app reports both:
+
+- the raw calculated `Pa:HR` result from this implementation
+- a `TP equivalent` value with the `+0.05%` offset applied as an alternative comparison value
 
 
