@@ -1,5 +1,7 @@
 # Heart Rate Drift Analyser
 
+![Heart Rate Drift Analyser logo](templates/logo.png)
+
 Calculate heart rate drift from GPX files for running workouts.
 
 This project uses an efficiency-factor approach rather than a heart-rate-only shortcut:

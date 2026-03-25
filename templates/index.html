@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Heart Rate Drift Analyzer</title>
+    <title>Heart Rate Drift Analyser</title>
     <style>
         :root {
             --accent-orange: #fc4c02;
@@ -193,9 +193,8 @@
 
         .results-section {
             display: none;
-            margin-top: 35px;
+            margin-top: 15px;
             padding-top: 30px;
-            border-top: 2px solid var(--line);
         }
 
         .results-section.active {
@@ -234,12 +233,14 @@
             color: var(--ink);
             font-size: 20px;
             font-weight: 600;
+            display: inline;
         }
 
         .result-secondary {
             color: #9c8376;
             font-size: 12px;
-            margin-top: 5px;
+            margin-left: 8px;
+            display: inline;
         }
 
         .result-item.highlight {
@@ -307,6 +308,7 @@
 
         .drift-scale-labels span:last-child {
             text-align: right;
+            white-space: nowrap;
         }
 
         .drift-interpretation {
@@ -421,7 +423,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏃 Heart Rate Drift Analyzer</h1>
+        <h1>🏃 Heart Rate Drift Analyser</h1>
 
         <form id="uploadForm">
             <div class="form-group">
@@ -480,7 +482,7 @@
             </div>
 
             <div class="button-group">
-                <button type="submit" class="btn-submit" id="submitBtn">Analyze GPX</button>
+                <button type="submit" class="btn-submit" id="submitBtn">Analyse GPX</button>
                 <button type="button" class="btn-reset" id="clearBtn">Clear</button>
             </div>
 
@@ -507,9 +509,9 @@
                         <div class="drift-scale-marker" id="driftScaleMarker"></div>
                     </div>
                     <div class="drift-scale-labels">
-                        <span>Low Drift<br>0-3.5%</span>
-                        <span>Within AeT<br>3.5-5%</span>
-                        <span>High Drift<br>&gt; 5%</span>
+                        <span>Low Drift<br>&lt3.5%</span>
+                        <span>Within AeT<br>3.5 - 5%</span>
+                        <span>High Drift<br>&gt;5%</span>
                     </div>
                     <div class="drift-interpretation" id="driftInterpretation">-</div>
                 </div>
@@ -529,9 +531,7 @@
             </div>
 
             <div class="details-section" id="detailsSection">
-                <strong style="color: #333;">Detailed Analysis</strong>
-                
-                <div style="margin-top: 15px; margin-bottom: 20px;">
+                <div style="margin-top: 0px; margin-bottom: 20px;">
                     <div class="detail-grid">
                         <div>
                             <div style="color: #666; font-size: 13px; font-weight: 600; margin-bottom: 8px;">First Half</div>
@@ -565,7 +565,7 @@
                     </div>
                 </div>
 
-                <div style="border-top: 1px solid #e0e0e0; padding-top: 15px;">
+                <div style="padding-top: 15px;">
                     <div style="color: #666; font-size: 13px; font-weight: 600; margin-bottom: 10px;">Delta</div>
                     <div class="detail-grid">
                         <div class="detail-item">
