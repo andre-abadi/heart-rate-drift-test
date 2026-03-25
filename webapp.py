@@ -1,14 +1,23 @@
-from flask import Flask, render_template, request, jsonify
+from pathlib import Path
+
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from heart_rate_drift import format_results_for_web
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+TEMPLATES_DIR = Path(__file__).resolve().parent / 'templates'
 
 
 @app.route('/')
 def index():
     """Render the main upload page."""
     return render_template('index.html')
+
+
+@app.route('/logo.png')
+def logo():
+    """Serve the app logo used by the web UI header."""
+    return send_from_directory(TEMPLATES_DIR, 'logo.png', mimetype='image/png')
 
 
 @app.route('/analyze', methods=['POST'])

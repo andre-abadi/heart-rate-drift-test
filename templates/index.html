@@ -46,6 +46,16 @@
             margin-bottom: 30px;
             text-align: center;
             font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .title-logo {
+            width: 42px;
+            height: 42px;
+            object-fit: contain;
         }
 
         .form-group {
@@ -423,7 +433,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏃 Heart Rate Drift Analyser</h1>
+        <h1><img src="/logo.png" alt="Heart Rate Drift Analyser logo" class="title-logo">Heart Rate Drift Analyser</h1>
 
         <form id="uploadForm">
             <div class="form-group">
