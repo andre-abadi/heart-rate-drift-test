@@ -358,7 +358,7 @@
 
             <div class="button-group">
                 <button type="submit" class="btn-submit" id="submitBtn">Analyze GPX</button>
-                <button type="reset" class="btn-reset">Clear</button>
+                <button type="button" class="btn-reset" id="clearBtn">Clear</button>
             </div>
 
             <div class="loading" id="loading">
@@ -379,36 +379,66 @@
             </div>
 
             <div class="result-item">
-                <div class="result-label">Total Workout Duration</div>
-                <div class="result-value" id="totalDuration">-</div>
+                <div class="detail-grid">
+                    <div>
+                        <div class="result-label">Total Workout Duration</div>
+                        <div class="result-value" id="totalDuration">-</div>
+                    </div>
+                    <div>
+                        <div class="result-label">Analysed Duration</div>
+                        <div class="result-value" id="analyzedDuration">-</div>
+                    </div>
+                </div>
             </div>
 
             <div class="details-section" id="detailsSection">
                 <strong style="color: #333;">Detailed Analysis</strong>
-                <div class="detail-grid">
-                    <div class="detail-item">
-                        <div class="detail-label">First Half Distance</div>
-                        <div class="detail-value" id="firstDistance">-</div>
+                
+                <div style="margin-top: 15px; margin-bottom: 20px;">
+                    <div class="detail-grid">
+                        <div>
+                            <div style="color: #666; font-size: 13px; font-weight: 600; margin-bottom: 8px;">First Half</div>
+                            <div class="detail-item">
+                                <div class="detail-label">Distance</div>
+                                <div class="detail-value" id="firstDistance">-</div>
+                            </div>
+                            <div class="detail-item" style="margin-top: 8px;">
+                                <div class="detail-label">Avg HR</div>
+                                <div class="detail-value" id="firstHr">-</div>
+                            </div>
+                            <div class="detail-item" style="margin-top: 8px;">
+                                <div class="detail-label">Efficiency Factor</div>
+                                <div class="detail-value" id="firstEf">-</div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="color: #666; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Second Half</div>
+                            <div class="detail-item">
+                                <div class="detail-label">Distance</div>
+                                <div class="detail-value" id="lastDistance">-</div>
+                            </div>
+                            <div class="detail-item" style="margin-top: 8px;">
+                                <div class="detail-label">Avg HR</div>
+                                <div class="detail-value" id="lastHr">-</div>
+                            </div>
+                            <div class="detail-item" style="margin-top: 8px;">
+                                <div class="detail-label">Efficiency Factor</div>
+                                <div class="detail-value" id="lastEf">-</div>
+                            </div>
                     </div>
-                    <div class="detail-item">
-                        <div class="detail-label">First Half Avg HR</div>
-                        <div class="detail-value" id="firstHr">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Second Half Distance</div>
-                        <div class="detail-value" id="lastDistance">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Second Half Avg HR</div>
-                        <div class="detail-value" id="lastHr">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">EF Change</div>
-                        <div class="detail-value" id="efChange">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Configuration</div>
-                        <div class="detail-value" id="configuration">-</div>
+                </div>
+
+                <div style="border-top: 1px solid #e0e0e0; padding-top: 15px;">
+                    <div style="color: #666; font-size: 13px; font-weight: 600; margin-bottom: 10px;">Delta</div>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">HR Change</div>
+                            <div class="detail-value" id="hrChange">-</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">EF Change</div>
+                            <div class="detail-value" id="efChange">-</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -498,24 +528,73 @@
             document.getElementById('decouplingPercent2').textContent = 
                 `TP Equivalent: ${data.tp_equivalent}%`;
             document.getElementById('totalDuration').textContent = data.total_duration;
+            document.getElementById('analyzedDuration').textContent = calculateAnalyzedDuration(
+                data.total_duration,
+                data.skip_first_mins,
+                data.skip_last_mins
+            );
 
             if (verboseCheckbox.checked && data.ef_change !== undefined) {
                 document.getElementById('firstDistance').textContent = 
                     `${data.first_distance_km} km`;
                 document.getElementById('firstHr').textContent = 
-                    `${data.first_avg_hr} bpm (${data.first_segment_samples} samples)`;
+                    `${data.first_avg_hr} bpm`;
                 document.getElementById('lastDistance').textContent = 
                     `${data.last_distance_km} km`;
                 document.getElementById('lastHr').textContent = 
-                    `${data.last_avg_hr} bpm (${data.last_segment_samples} samples)`;
+                    `${data.last_avg_hr} bpm`;
+                document.getElementById('firstEf').textContent = 
+                    `${(data.first_ef * 1000).toFixed(2)} m/bpm`;
+                document.getElementById('lastEf').textContent = 
+                    `${(data.last_ef * 1000).toFixed(2)} m/bpm`;
+                
+                // Calculate HR change
+                const hrChange = data.last_avg_hr - data.first_avg_hr;
+                document.getElementById('hrChange').textContent = 
+                    `${hrChange >= 0 ? '+' : ''}${hrChange.toFixed(2)} bpm`;
+                
                 document.getElementById('efChange').textContent = 
-                    `${data.ef_change.toFixed(6)} km/bpm`;
-                document.getElementById('configuration').textContent = 
-                    `Skip ${data.skip_first_mins}min / ${data.skip_last_mins}min`;
+                    `${(data.ef_change * 1000).toFixed(2)} m/bpm`;
+                
                 detailsSection.classList.add('active');
             } else {
                 detailsSection.classList.remove('active');
             }
+        }
+
+        function calculateAnalyzedDuration(totalDurationText, skipFirstMins, skipLastMins) {
+            const totalSeconds = parseDurationToSeconds(totalDurationText);
+            const activeSeconds = Math.max(0, totalSeconds - (skipFirstMins * 60) - (skipLastMins * 60));
+
+            return formatDuration(activeSeconds);
+        }
+
+        function parseDurationToSeconds(durationText) {
+            const parts = durationText.split(':').map(Number);
+
+            if (parts.some(Number.isNaN)) {
+                return 0;
+            }
+
+            if (parts.length === 3) {
+                return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+            }
+
+            if (parts.length === 2) {
+                return (parts[0] * 60) + parts[1];
+            }
+
+            return 0;
+        }
+
+        function formatDuration(totalSeconds) {
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            return [hours, minutes, seconds]
+                .map((value, index) => index === 0 ? String(value) : String(value).padStart(2, '0'))
+                .join(':');
         }
 
         function showError(message) {
@@ -532,6 +611,15 @@
                     detailsSection.classList.remove('active');
                 }
             }
+        });
+
+        // Clear button
+        document.getElementById('clearBtn').addEventListener('click', function() {
+            form.reset();
+            fileName.textContent = '';
+            resultsSection.classList.remove('active');
+            errorMessage.classList.remove('active');
+            detailsSection.classList.remove('active');
         });
     </script>
 </body>
