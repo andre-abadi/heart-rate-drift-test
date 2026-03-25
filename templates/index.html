@@ -16,9 +16,9 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
-            padding: 20px;
+            padding: 48px 20px 20px;
         }
 
         .container {
@@ -495,7 +495,7 @@
             formData.append('file', fileInput.files[0]);
             formData.append('skip_first', document.getElementById('skipFirst').value);
             formData.append('skip_last', document.getElementById('skipLast').value);
-            formData.append('verbose', verboseCheckbox.checked);
+            formData.append('verbose', 'true');
 
             loading.classList.add('active');
             errorMessage.classList.remove('active');
@@ -534,7 +534,7 @@
                 data.skip_last_mins
             );
 
-            if (verboseCheckbox.checked && data.ef_change !== undefined) {
+            if (data.ef_change !== undefined) {
                 document.getElementById('firstDistance').textContent = 
                     `${data.first_distance_km} km`;
                 document.getElementById('firstHr').textContent = 
@@ -555,8 +555,12 @@
                 
                 document.getElementById('efChange').textContent = 
                     `${(data.ef_change * 1000).toFixed(2)} m/bpm`;
-                
-                detailsSection.classList.add('active');
+
+                if (verboseCheckbox.checked) {
+                    detailsSection.classList.add('active');
+                } else {
+                    detailsSection.classList.remove('active');
+                }
             } else {
                 detailsSection.classList.remove('active');
             }
