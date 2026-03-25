@@ -677,7 +677,7 @@
                 document.getElementById('hrChange').textContent =
                     `${data.hr_change >= 0 ? '+' : ''}${data.hr_change} bpm`;
                 document.getElementById('efChange').textContent =
-                    `${data.ef_change_m_per_bpm} m/bpm`;
+                    `${data.ef_change_m_per_bpm >= 0 ? '+' : ''}${data.ef_change_m_per_bpm} m/bpm`;
 
                 if (verboseCheckbox.checked) {
                     detailsSection.classList.add('active');

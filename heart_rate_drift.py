@@ -354,8 +354,8 @@ def format_results_for_web(gpx_file: Optional[str] = None, gpx_file_obj = None, 
                 'last_ef_m_per_bpm': round(results['last_ef'] * 1000, 2),
                 'last_segment_samples': results['last_segment_samples'],
                 'hr_change': round(hr_change, 2),
-                'ef_change': round(results['decoupling_bpm'], 6),
-                'ef_change_m_per_bpm': round(results['decoupling_bpm'] * 1000, 2),
+                'ef_change': round(-results['decoupling_bpm'], 6),
+                'ef_change_m_per_bpm': round(-results['decoupling_bpm'] * 1000, 2),
             })
         
         return output
@@ -416,7 +416,9 @@ def main():
 
             print(f"\nDelta (2nd half vs 1st half):")
             print(f"  HR Change       : {hr_sign}{hr_change:.2f} bpm")
-            print(f"  EF Change       : {results['decoupling_bpm'] * 1000:.2f} m/bpm")
+            ef_change = -results['decoupling_bpm'] * 1000
+            ef_sign = '+' if ef_change >= 0 else ''
+            print(f"  EF Change       : {ef_sign}{ef_change:.2f} m/bpm")
 
         print(f"\nResults:")
         print(f"  Pa:HR: {decoupling_percent:.2f}% [TP: {tp_equivalent:.2f}%]")
