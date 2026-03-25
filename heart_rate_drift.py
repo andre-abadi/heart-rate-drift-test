@@ -1,5 +1,5 @@
 """
-Heart Rate Drift Calculator for Running
+Heart Rate Drift Analyser
 Calculates Aerobic Decoupling (aerobic efficiency drift) from a GPX file.
 Aerobic Decoupling = (EF_second_half - EF_first_half) / EF_first_half × 100%
 Where EF (Efficiency Factor) = Distance / Heart Rate
@@ -184,7 +184,7 @@ class HeartRateDriftCalculator:
     
     def calculate_drift(self, skip_first_mins: int = 15, skip_last_mins: int = 15) -> dict:
         """
-        Calculate Aerobic Decoupling (EF drift) for running.
+        Heart Rate Drift Analyser.
         
         Removes warm-up (first N minutes) and cool-down (last N minutes),
         then splits by time and compares Efficiency Factor (EF) between halves.
@@ -392,7 +392,7 @@ def main():
         analyzed_td = total_td - timedelta(minutes=skip_first + skip_last)
 
         print(f"\n{'='*60}")
-        print(f"Aerobic Decoupling Analysis (Running)")
+        print(f"Heart Rate Drift Analyser")
         print(f"{'='*60}")
         print(f"Total Workout Duration : {_format_timedelta(total_td)}")
         print(f"Analysed Duration      : {_format_timedelta(analyzed_td)}")
