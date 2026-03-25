@@ -1,6 +1,6 @@
 # Heart Rate Drift Analyser
 
-![Heart Rate Drift Analyser logo](templates/logo.png)
+<img src="templates/logo.png" alt="Heart Rate Drift Analyser logo" width="180">
 
 Calculate heart rate drift from GPX files for running workouts.
 
