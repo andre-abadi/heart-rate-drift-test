@@ -154,6 +154,7 @@ The container image is:
 - stateless
 - running under s6-overlay
 - configured to run the app as the LSIO `abc` user
+- publishable to GitHub Container Registry via [docker-publish.yml](.github/workflows/docker-publish.yml)
 
 Build from the repository root:
 
@@ -172,6 +173,37 @@ Notes:
 - No volume mappings are required.
 - `PUID` and `PGID` are optional for this stateless app but still allow the container to avoid running as root.
 - The Docker packaging files live under `docker/` and are copied into the image from there.
+
+### GitHub Container Registry
+
+The repository includes a GitHub Actions workflow at [docker-publish.yml](.github/workflows/docker-publish.yml) that builds from [docker/Dockerfile](docker/Dockerfile) and publishes the image to GitHub Container Registry (`ghcr.io`).
+
+The workflow:
+
+- builds on pull requests to validate the Dockerfile
+- publishes on pushes to `main`
+- publishes on pushes to `master`
+- publishes version tags such as `v1.0.0`
+- can also be run manually with `workflow_dispatch`
+
+Published image names follow this pattern:
+
+```text
+ghcr.io/<owner>/<repo>
+```
+
+Typical tags include:
+
+- branch tags such as `main`
+- version tags such as `v1.0.0`
+- `latest` on the default branch
+
+After the workflow has published an image, you can pull and run it with:
+
+```bash
+docker pull ghcr.io/<owner>/<repo>:latest
+docker run -e PUID=1000 -e PGID=1000 -p 5000:5000 ghcr.io/<owner>/<repo>:latest
+```
 
 ## Accuracy Notes
 
