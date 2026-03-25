@@ -649,41 +649,35 @@
         });
 
         function displayResults(data) {
-            const driftPercent = Number(data.decoupling_percent);
-
-            document.getElementById('decouplingPercent').textContent = 
-                `${driftPercent}%`;
-            document.getElementById('decouplingPercent2').textContent = 
+            document.getElementById('decouplingPercent').textContent =
+                `${data.decoupling_percent}%`;
+            document.getElementById('decouplingPercent2').textContent =
                 `TP Equivalent: ${data.tp_equivalent}%`;
             document.getElementById('totalDuration').textContent = data.total_duration;
-            document.getElementById('analyzedDuration').textContent = calculateAnalyzedDuration(
-                data.total_duration,
-                data.skip_first_mins,
-                data.skip_last_mins
-            );
-            updateDriftScale(driftPercent);
+            document.getElementById('analyzedDuration').textContent = data.analyzed_duration;
+
+            // Drift scale bar — driven entirely by pre-computed backend values
+            driftScaleMarker.style.left = `${data.interpretation.marker_percent}%`;
+            driftInterpretation.textContent = data.interpretation.label;
+            driftInterpretation.className = `drift-interpretation ${data.interpretation.band}`;
 
             if (data.ef_change !== undefined) {
-                document.getElementById('firstDistance').textContent = 
+                document.getElementById('firstDistance').textContent =
                     `${data.first_distance_km} km`;
-                document.getElementById('firstHr').textContent = 
+                document.getElementById('firstHr').textContent =
                     `${data.first_avg_hr} bpm`;
-                document.getElementById('lastDistance').textContent = 
+                document.getElementById('lastDistance').textContent =
                     `${data.last_distance_km} km`;
-                document.getElementById('lastHr').textContent = 
+                document.getElementById('lastHr').textContent =
                     `${data.last_avg_hr} bpm`;
-                document.getElementById('firstEf').textContent = 
-                    `${(data.first_ef * 1000).toFixed(2)} m/bpm`;
-                document.getElementById('lastEf').textContent = 
-                    `${(data.last_ef * 1000).toFixed(2)} m/bpm`;
-                
-                // Calculate HR change
-                const hrChange = data.last_avg_hr - data.first_avg_hr;
-                document.getElementById('hrChange').textContent = 
-                    `${hrChange >= 0 ? '+' : ''}${hrChange.toFixed(2)} bpm`;
-                
-                document.getElementById('efChange').textContent = 
-                    `${(data.ef_change * 1000).toFixed(2)} m/bpm`;
+                document.getElementById('firstEf').textContent =
+                    `${data.first_ef_m_per_bpm} m/bpm`;
+                document.getElementById('lastEf').textContent =
+                    `${data.last_ef_m_per_bpm} m/bpm`;
+                document.getElementById('hrChange').textContent =
+                    `${data.hr_change >= 0 ? '+' : ''}${data.hr_change} bpm`;
+                document.getElementById('efChange').textContent =
+                    `${data.ef_change_m_per_bpm} m/bpm`;
 
                 if (verboseCheckbox.checked) {
                     detailsSection.classList.add('active');
@@ -693,86 +687,6 @@
             } else {
                 detailsSection.classList.remove('active');
             }
-        }
-
-        function calculateAnalyzedDuration(totalDurationText, skipFirstMins, skipLastMins) {
-            const totalSeconds = parseDurationToSeconds(totalDurationText);
-            const activeSeconds = Math.max(0, totalSeconds - (skipFirstMins * 60) - (skipLastMins * 60));
-
-            return formatDuration(activeSeconds);
-        }
-
-        function updateDriftScale(driftPercent) {
-            const markerPosition = getBandAwareMarkerPosition(driftPercent);
-            const interpretation = getDriftInterpretation(driftPercent);
-
-            driftScaleMarker.style.left = `${markerPosition}%`;
-            driftInterpretation.textContent = interpretation.label;
-            driftInterpretation.className = `drift-interpretation ${interpretation.status}`;
-        }
-
-        function getBandAwareMarkerPosition(driftPercent) {
-            const clampedPercent = Math.max(0, Math.min(8, driftPercent));
-
-            // Visual layout: first zone 12.5%, middle zone 75%, last zone 12.5%
-            if (clampedPercent <= 3.5) {
-                return (clampedPercent / 3.5) * 12.5;
-            }
-
-            if (clampedPercent < 5) {
-                return 12.5 + ((clampedPercent - 3.5) / 1.5) * 75;
-            }
-
-            return 87.5 + ((clampedPercent - 5) / 3) * 12.5;
-        }
-
-        function getDriftInterpretation(driftPercent) {
-            if (driftPercent <= 3.5) {
-                return {
-                    status: 'below',
-                    label: 'Below AeT - Recommend increasing Z2 Max by 5bpm'
-                };
-            }
-
-            if (driftPercent >= 5) {
-                return {
-                    status: 'above',
-                    label: 'Above AeT - Recommend reducing Z2 Max by 5bpm'
-                };
-            }
-
-            return {
-                status: 'within',
-                label: 'Within AeT - No Change Recommended'
-            };
-        }
-
-        function parseDurationToSeconds(durationText) {
-            const parts = durationText.split(':').map(Number);
-
-            if (parts.some(Number.isNaN)) {
-                return 0;
-            }
-
-            if (parts.length === 3) {
-                return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-            }
-
-            if (parts.length === 2) {
-                return (parts[0] * 60) + parts[1];
-            }
-
-            return 0;
-        }
-
-        function formatDuration(totalSeconds) {
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-
-            return [hours, minutes, seconds]
-                .map((value, index) => index === 0 ? String(value) : String(value).padStart(2, '0'))
-                .join(':');
         }
 
         function showError(message) {

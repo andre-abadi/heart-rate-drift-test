@@ -12,6 +12,51 @@ from typing import List, Tuple, Optional
 import math
 
 
+def _format_timedelta(td: timedelta) -> str:
+    """Format a timedelta as H:MM:SS."""
+    total_seconds = int(td.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+
+def _get_drift_interpretation(decoupling_percent: float) -> dict:
+    """
+    Classify aerobic decoupling into an AeT band with label and visual marker position.
+
+    Thresholds (Uphill Athlete method):
+      <= 3.5%  → Below AeT
+      3.5–5%   → Within AeT
+      >= 5%    → Above AeT
+
+    Marker percent maps the result onto a three-zone bar:
+      Below zone  = first 12.5% of bar width  (0–3.5%)
+      Within zone = middle 75% of bar width   (3.5–5.0%)
+      Above zone  = last 12.5% of bar width   (5.0%+, clamped at 8%)
+    """
+    p = decoupling_percent
+
+    if p <= 3.5:
+        band = 'below'
+        label = 'Below AeT - Recommend increasing Z2 Max by 5bpm'
+        marker_percent = (p / 3.5) * 12.5
+    elif p < 5.0:
+        band = 'within'
+        label = 'Within AeT - No Change Recommended'
+        marker_percent = 12.5 + ((p - 3.5) / 1.5) * 75.0
+    else:
+        band = 'above'
+        label = 'Above AeT - Recommend reducing Z2 Max by 5bpm'
+        marker_percent = 87.5 + ((min(p, 8.0) - 5.0) / 3.0) * 12.5
+
+    return {
+        'band': band,
+        'label': label,
+        'marker_percent': round(min(100.0, max(0.0, marker_percent)), 1),
+    }
+
+
 class HeartRateDriftCalculator:
     """Calculates heart rate drift from a GPX file."""
     
@@ -277,29 +322,40 @@ def format_results_for_web(gpx_file: Optional[str] = None, gpx_file_obj = None, 
         results = calculator.calculate_drift(skip_first, skip_last)
         
         tp_equivalent = results['decoupling_percent'] + 0.05
-        
+        decoupling_percent = round(results['decoupling_percent'], 2)
+
+        total_td = results['total_duration']
+        analyzed_td = total_td - timedelta(minutes=skip_first + skip_last)
+
         output = {
             'status': 'success',
             'data': {
-                'total_duration': str(results['total_duration']),
+                'total_duration': _format_timedelta(total_td),
+                'analyzed_duration': _format_timedelta(analyzed_td),
                 'skip_first_mins': skip_first,
                 'skip_last_mins': skip_last,
-                'decoupling_percent': round(results['decoupling_percent'], 2),
+                'decoupling_percent': decoupling_percent,
                 'tp_equivalent': round(tp_equivalent, 2),
+                'interpretation': _get_drift_interpretation(decoupling_percent),
             }
         }
-        
+
         if verbose:
+            hr_change = results['last_avg_hr'] - results['first_avg_hr']
             output['data'].update({
                 'first_distance_km': results['first_distance_km'],
                 'first_avg_hr': results['first_avg_hr'],
                 'first_ef': round(results['first_ef'], 4),
+                'first_ef_m_per_bpm': round(results['first_ef'] * 1000, 2),
                 'first_segment_samples': results['first_segment_samples'],
                 'last_distance_km': results['last_distance_km'],
                 'last_avg_hr': results['last_avg_hr'],
                 'last_ef': round(results['last_ef'], 4),
+                'last_ef_m_per_bpm': round(results['last_ef'] * 1000, 2),
                 'last_segment_samples': results['last_segment_samples'],
+                'hr_change': round(hr_change, 2),
                 'ef_change': round(results['decoupling_bpm'], 6),
+                'ef_change_m_per_bpm': round(results['decoupling_bpm'] * 1000, 2),
             })
         
         return output
@@ -317,13 +373,6 @@ def main():
     
     if len(sys.argv) < 2:
         print("Usage: python heart_rate_drift.py <gpx_file_path> [skip_warm_up_mins] [skip_cool_down_mins] [--verbose]")
-        print("\nExample: python heart_rate_drift.py workout.gpx 15 15 --verbose")
-        print("\nCalculates Aerobic Decoupling (Aerobic Efficiency drift) for RUNNING:")
-        print("  1. Removing the first N minutes (warm-up)")
-        print("  2. Removing the last N minutes (cool-down)")
-        print("  3. Splitting remaining active time in half (by time, not samples)")
-        print("  4. Calculating Efficiency Factor (EF) = Distance / Avg HR for each half")
-        print("  5. Computing Aerobic Decoupling = (EF_first - EF_second) / EF_first × 100%")
         sys.exit(1)
     
     gpx_file = sys.argv[1]
@@ -334,31 +383,44 @@ def main():
     try:
         calculator = HeartRateDriftCalculator(gpx_file)
         results = calculator.calculate_drift(skip_first, skip_last)
-        
+
+        decoupling_percent = round(results['decoupling_percent'], 2)
+        tp_equivalent = round(decoupling_percent + 0.05, 2)
+        interpretation = _get_drift_interpretation(decoupling_percent)
+
+        total_td = results['total_duration']
+        analyzed_td = total_td - timedelta(minutes=skip_first + skip_last)
+
         print(f"\n{'='*60}")
         print(f"Aerobic Decoupling Analysis (Running)")
         print(f"{'='*60}")
-        print(f"Total Workout Duration: {results['total_duration']}")
+        print(f"Total Workout Duration : {_format_timedelta(total_td)}")
+        print(f"Analysed Duration      : {_format_timedelta(analyzed_td)}")
         print(f"\nConfiguration:")
         print(f"  Skip first {skip_first} mins (warm-up)")
         print(f"  Skip last {skip_last} mins (cool-down)")
-        
+
         if verbose:
-            print(f"\n{'First Half (after warm-up):':40}")
-            print(f"  Distance: {results['first_distance_km']} km")
-            print(f"  Average HR: {results['first_avg_hr']} bpm ({results['first_segment_samples']} samples)")
-            print(f"  Efficiency Factor: {results['first_ef']:.4f} km/bpm")
-            
-            print(f"\n{'Second Half (before cool-down):':40}")
-            print(f"  Distance: {results['last_distance_km']} km")
-            print(f"  Average HR: {results['last_avg_hr']} bpm ({results['last_segment_samples']} samples)")
-            print(f"  Efficiency Factor: {results['last_ef']:.4f} km/bpm")
-        
-        print(f"\n{'Results:':40}")
-        if verbose:
-            print(f"  EF Change: {results['decoupling_bpm']:.6f} km/bpm")
-        tp_equivalent = results['decoupling_percent'] + 0.05
-        print(f"  Pa:HR: {results['decoupling_percent']:.2f}% [TP: {tp_equivalent:.2f}%]")
+            hr_change = results['last_avg_hr'] - results['first_avg_hr']
+            hr_sign = '+' if hr_change >= 0 else ''
+
+            print(f"\nFirst Half (after warm-up):")
+            print(f"  Distance        : {results['first_distance_km']} km")
+            print(f"  Average HR      : {results['first_avg_hr']} bpm  ({results['first_segment_samples']} samples)")
+            print(f"  Efficiency (EF) : {results['first_ef'] * 1000:.2f} m/bpm")
+
+            print(f"\nSecond Half (before cool-down):")
+            print(f"  Distance        : {results['last_distance_km']} km")
+            print(f"  Average HR      : {results['last_avg_hr']} bpm  ({results['last_segment_samples']} samples)")
+            print(f"  Efficiency (EF) : {results['last_ef'] * 1000:.2f} m/bpm")
+
+            print(f"\nDelta (2nd half vs 1st half):")
+            print(f"  HR Change       : {hr_sign}{hr_change:.2f} bpm")
+            print(f"  EF Change       : {results['decoupling_bpm'] * 1000:.2f} m/bpm")
+
+        print(f"\nResults:")
+        print(f"  Pa:HR: {decoupling_percent:.2f}% [TP: {tp_equivalent:.2f}%]")
+        print(f"  {interpretation['label']}")
         print(f"{'='*60}\n")
         
     except FileNotFoundError:
