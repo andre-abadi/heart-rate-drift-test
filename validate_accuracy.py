@@ -76,7 +76,8 @@ def run_calculator(gpx_file: Path, skip_first: int, skip_last: int) -> Optional[
             return None
         
         # Extract percentage from output
-        match = re.search(r'Percentage: ([-\d.]+)%', result.stdout)
+        # Look for "Pa:HR: X.XX%" format
+        match = re.search(r'Pa:HR:\s*([-\d.]+)%', result.stdout)
         if match:
             return float(match.group(1))
         else:

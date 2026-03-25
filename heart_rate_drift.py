@@ -15,7 +15,7 @@ import math
 class HeartRateDriftCalculator:
     """Calculates heart rate drift from a GPX file."""
     
-    def __init__(self, gpx_file_path: str = None, gpx_file_obj = None):
+    def __init__(self, gpx_file_path: Optional[str] = None, gpx_file_obj = None):
         """
         Initialize with a GPX file path or file object.
         
@@ -44,6 +44,8 @@ class HeartRateDriftCalculator:
                     return gpxpy.parse(gpx_file)
         else:
             # Load from file path (CLI)
+            if self.gpx_file_path is None:
+                raise ValueError("Either gpx_file_path or gpx_file_obj must be provided")
             with open(self.gpx_file_path, 'r') as gpx_file:
                 return gpxpy.parse(gpx_file)
     
@@ -256,7 +258,7 @@ class HeartRateDriftCalculator:
         }
 
 
-def format_results_for_web(gpx_file: str = None, gpx_file_obj = None, skip_first: int = 15, skip_last: int = 15, verbose: bool = False) -> dict:
+def format_results_for_web(gpx_file: Optional[str] = None, gpx_file_obj = None, skip_first: int = 15, skip_last: int = 15, verbose: bool = False) -> dict:
     """
     Calculate drift and return results in web-friendly format.
     
