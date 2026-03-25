@@ -1,14 +1,8 @@
 from flask import Flask, render_template, request, jsonify
-from werkzeug.utils import secure_filename
-import os
 from heart_rate_drift import format_results_for_web
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['UPLOAD_FOLDER'] = 'uploads'
-
-# Create upload folder if it doesn't exist
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 
 @app.route('/')
@@ -34,7 +28,7 @@ def analyze():
     
     file = request.files['file']
     
-    if file.filename == '':
+    if file.filename == '' or file.filename is None:
         return jsonify({'status': 'error', 'message': 'No file selected'}), 400
     
     if not file.filename.lower().endswith('.gpx'):

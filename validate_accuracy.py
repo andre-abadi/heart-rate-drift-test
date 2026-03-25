@@ -94,7 +94,7 @@ def run_calculator(gpx_file: Path, skip_first: int, skip_last: int) -> Optional[
 
 def main():
     """Find and validate all test GPX files."""
-    gpx_dir = Path('.')
+    gpx_dir = Path('./test')
     test_files = sorted(gpx_dir.glob('test*.gpx'))
     
     if not test_files:
