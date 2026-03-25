@@ -236,6 +236,101 @@
             background: linear-gradient(135deg, #fff4ee 0%, #ffe6d8 100%);
         }
 
+        .drift-scale {
+            margin-top: 16px;
+        }
+
+        .drift-scale-bar {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr 6fr 1fr;
+            height: 14px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #f5d9c9;
+            box-shadow: inset 0 0 0 1px rgba(113, 53, 21, 0.08);
+        }
+
+        .drift-scale-zone {
+            height: 100%;
+        }
+
+        .drift-scale-zone.below {
+            background: linear-gradient(90deg, #b9dcff 0%, #74b4ff 100%);
+        }
+
+        .drift-scale-zone.within {
+            background: linear-gradient(90deg, #b8efbf 0%, #6fd489 100%);
+        }
+
+        .drift-scale-zone.above {
+            background: linear-gradient(90deg, #ffab9f 0%, #f5564a 100%);
+        }
+
+        .drift-scale-marker {
+            position: absolute;
+            top: 50%;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #fffdfb;
+            border: 3px solid var(--ink);
+            transform: translate(-50%, -50%);
+            box-shadow: 0 2px 8px rgba(35, 32, 28, 0.2);
+        }
+
+        .drift-scale-labels {
+            display: grid;
+            grid-template-columns: 1fr 6fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .drift-scale-labels span:nth-child(2) {
+            text-align: center;
+        }
+
+        .drift-scale-labels span:last-child {
+            text-align: right;
+        }
+
+        .drift-interpretation {
+            margin-top: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.65);
+            color: var(--ink);
+        }
+
+        .drift-interpretation::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .drift-interpretation.below {
+            color: #a24a1b;
+        }
+
+        .drift-interpretation.within {
+            color: #8a6400;
+        }
+
+        .drift-interpretation.above {
+            color: #c23a00;
+        }
+
         .error-message {
             background: #fff0eb;
             color: #b12b00;
@@ -391,6 +486,20 @@
                 <div class="result-label">Aerobic Decoupling Percentage</div>
                 <div class="result-value" id="decouplingPercent">-</div>
                 <div class="result-secondary" id="decouplingPercent2">-</div>
+                <div class="drift-scale">
+                    <div class="drift-scale-bar" aria-hidden="true">
+                        <div class="drift-scale-zone below"></div>
+                        <div class="drift-scale-zone within"></div>
+                        <div class="drift-scale-zone above"></div>
+                        <div class="drift-scale-marker" id="driftScaleMarker"></div>
+                    </div>
+                    <div class="drift-scale-labels">
+                        <span>Low Drift<br>0-3.5%</span>
+                        <span>Within AeT<br>3.5-5%</span>
+                        <span>High Drift<br>&gt; 5%</span>
+                    </div>
+                    <div class="drift-interpretation" id="driftInterpretation">-</div>
+                </div>
             </div>
 
             <div class="result-item">
@@ -470,6 +579,8 @@
         const errorMessage = document.getElementById('errorMessage');
         const detailsSection = document.getElementById('detailsSection');
         const verboseCheckbox = document.getElementById('verbose');
+        const driftScaleMarker = document.getElementById('driftScaleMarker');
+        const driftInterpretation = document.getElementById('driftInterpretation');
 
         // File input handling
         fileInput.addEventListener('change', function() {
@@ -538,8 +649,10 @@
         });
 
         function displayResults(data) {
+            const driftPercent = Number(data.decoupling_percent);
+
             document.getElementById('decouplingPercent').textContent = 
-                `${data.decoupling_percent}%`;
+                `${driftPercent}%`;
             document.getElementById('decouplingPercent2').textContent = 
                 `TP Equivalent: ${data.tp_equivalent}%`;
             document.getElementById('totalDuration').textContent = data.total_duration;
@@ -548,6 +661,7 @@
                 data.skip_first_mins,
                 data.skip_last_mins
             );
+            updateDriftScale(driftPercent);
 
             if (data.ef_change !== undefined) {
                 document.getElementById('firstDistance').textContent = 
@@ -586,6 +700,51 @@
             const activeSeconds = Math.max(0, totalSeconds - (skipFirstMins * 60) - (skipLastMins * 60));
 
             return formatDuration(activeSeconds);
+        }
+
+        function updateDriftScale(driftPercent) {
+            const markerPosition = getBandAwareMarkerPosition(driftPercent);
+            const interpretation = getDriftInterpretation(driftPercent);
+
+            driftScaleMarker.style.left = `${markerPosition}%`;
+            driftInterpretation.textContent = interpretation.label;
+            driftInterpretation.className = `drift-interpretation ${interpretation.status}`;
+        }
+
+        function getBandAwareMarkerPosition(driftPercent) {
+            const clampedPercent = Math.max(0, Math.min(8, driftPercent));
+
+            // Visual layout: first zone 12.5%, middle zone 75%, last zone 12.5%
+            if (clampedPercent <= 3.5) {
+                return (clampedPercent / 3.5) * 12.5;
+            }
+
+            if (clampedPercent < 5) {
+                return 12.5 + ((clampedPercent - 3.5) / 1.5) * 75;
+            }
+
+            return 87.5 + ((clampedPercent - 5) / 3) * 12.5;
+        }
+
+        function getDriftInterpretation(driftPercent) {
+            if (driftPercent <= 3.5) {
+                return {
+                    status: 'below',
+                    label: 'Below AeT - Recommend increasing Z2 Max by 5bpm'
+                };
+            }
+
+            if (driftPercent >= 5) {
+                return {
+                    status: 'above',
+                    label: 'Above AeT - Recommend reducing Z2 Max by 5bpm'
+                };
+            }
+
+            return {
+                status: 'within',
+                label: 'Within AeT - No Change Recommended'
+            };
         }
 
         function parseDurationToSeconds(durationText) {
