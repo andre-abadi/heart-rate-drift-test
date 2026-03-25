@@ -52,6 +52,17 @@
             margin-bottom: 25px;
         }
 
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .form-row .form-group {
+            margin-bottom: 0;
+        }
+
         label {
             display: block;
             margin-bottom: 8px;
@@ -431,28 +442,30 @@
                 </div>
             </div>
 
-            <div class="form-group">
-                <label for="skipFirst">Warm-up Duration (minutes)</label>
-                <input 
-                    type="number" 
-                    id="skipFirst" 
-                    name="skip_first" 
-                    value="15" 
-                    min="0"
-                    max="120"
-                >
-            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="skipFirst">Warm-up Duration (minutes)</label>
+                    <input 
+                        type="number" 
+                        id="skipFirst" 
+                        name="skip_first" 
+                        value="15" 
+                        min="0"
+                        max="120"
+                    >
+                </div>
 
-            <div class="form-group">
-                <label for="skipLast">Cool-down Duration (minutes)</label>
-                <input 
-                    type="number" 
-                    id="skipLast" 
-                    name="skip_last" 
-                    value="15" 
-                    min="0"
-                    max="120"
-                >
+                <div class="form-group">
+                    <label for="skipLast">Cool-down Duration (minutes)</label>
+                    <input 
+                        type="number" 
+                        id="skipLast" 
+                        name="skip_last" 
+                        value="15" 
+                        min="0"
+                        max="120"
+                    >
+                </div>
             </div>
 
             <div class="form-group">
